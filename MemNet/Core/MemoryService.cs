@@ -35,7 +35,7 @@ public class MemoryService : IMemoryService
     public async Task<AddMemoryResponse> AddAsync(AddMemoryRequest request, CancellationToken ct = default)
     {
         // 1. Combine message content
-        var messagesText = string.Join("\n", (IEnumerable<string>)request.Messages.Select(m => $"{m.Role}: {m.Content}"));
+        var messagesText = string.Join("\n", request.Messages.Select(m => $"{m.Role}: {m.Content}"));
 
         // 2. Extract structured memories using LLM
         var extractedMemories = await _llm.ExtractMemoriesAsync(messagesText, ct);

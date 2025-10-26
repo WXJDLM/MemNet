@@ -8,6 +8,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using MemNet.Abstractions;
 using MemNet.Config;
+using MemNet.Internals;
 using MemNet.Models;
 using Microsoft.Extensions.Options;
 
@@ -16,57 +17,25 @@ namespace MemNet.VectorStores;
 /// <summary>
 /// Chroma vector store implementation
 /// </summary>
-public class ChromaVectorStore : IVectorStore
+public class ChromaV2VectorStore : IVectorStore
 {
     private readonly HttpClient _httpClient;
-    private readonly VectorStoreConfig _config;
-    private readonly string _collectionName;
+    private readonly string _baseUrl;
 
-    public ChromaVectorStore(HttpClient httpClient, IOptions<MemoryConfig> config)
+    public ChromaV2VectorStore(HttpClient httpClient, IOptions<ChromaVectorStoreConfig> config)
     {
         _httpClient = httpClient;
-        _config = config.Value.VectorStore;
-        _collectionName = _config.CollectionName;
-
+        var config1 = config.Value;
+        _baseUrl = $"/api/v2/tenants/{config.Value.Tenant}/databases/{config1.Database}/collections/{config1.CollectionId}";
         // Configure HttpClient
         if (_httpClient.BaseAddress == null)
         {
-            _httpClient.BaseAddress = new Uri(_config.Endpoint);
+            _httpClient.BaseAddress = new Uri(config1.Endpoint);
         }
 
-        if (!string.IsNullOrEmpty(_config.ApiKey))
+        if (!string.IsNullOrEmpty(config1.ApiKey))
         {
-            _httpClient.DefaultRequestHeaders.Add("Authorization", $"Bearer {_config.ApiKey}");
-        }
-
-        // Ensure collection exists
-        EnsureCollectionAsync().GetAwaiter().GetResult();
-    }
-
-    private async Task EnsureCollectionAsync()
-    {
-        try
-        {
-            // Try to get collection
-            var response = await _httpClient.GetAsync($"/api/v1/collections/{_collectionName}");
-            
-            if (response.IsSuccessStatusCode)
-            {
-                return;
-            }
-
-            // Create collection
-            var createRequest = new
-            {
-                name = _collectionName,
-                metadata = new { description = "MemNet memory collection" }
-            };
-
-            await _httpClient.PostAsJsonAsync("/api/v1/collections", createRequest);
-        }
-        catch
-        {
-            // Collection might already exist or Chroma is not available
+            _httpClient.DefaultRequestHeaders.Add("Authorization", $"Bearer {config1.ApiKey}");
         }
     }
 
@@ -90,7 +59,7 @@ public class ChromaVectorStore : IVectorStore
         };
 
         var response = await _httpClient.PostAsJsonAsync(
-            $"/api/v1/collections/{_collectionName}/add",
+            $"{_baseUrl}/add",
             request,
             ct);
 
@@ -117,7 +86,7 @@ public class ChromaVectorStore : IVectorStore
         };
 
         var response = await _httpClient.PostAsJsonAsync(
-            $"/api/v1/collections/{_collectionName}/update",
+            $"{_baseUrl}/update",
             request,
             ct);
 
@@ -138,11 +107,11 @@ public class ChromaVectorStore : IVectorStore
         };
 
         var response = await _httpClient.PostAsJsonAsync(
-            $"/api/v1/collections/{_collectionName}/query",
+            $"{_baseUrl}/query",
             searchRequest,
             ct);
 
-        response.EnsureSuccessStatusCode();
+        await response.EnsureSuccessWithContentAsync();
 
         var result = await response.Content.ReadFromJsonAsync<ChromaQueryResponse>(ct);
 
@@ -195,7 +164,7 @@ public class ChromaVectorStore : IVectorStore
         };
 
         var response = await _httpClient.PostAsJsonAsync(
-            $"/api/v1/collections/{_collectionName}/get",
+            $"{_baseUrl}/get",
             getRequest,
             ct);
 
@@ -243,7 +212,7 @@ public class ChromaVectorStore : IVectorStore
         };
 
         var response = await _httpClient.PostAsJsonAsync(
-            $"/api/v1/collections/{_collectionName}/get",
+            $"/{_baseUrl}/get",
             getRequest,
             ct);
 
@@ -287,7 +256,7 @@ public class ChromaVectorStore : IVectorStore
         };
 
         var response = await _httpClient.PostAsJsonAsync(
-            $"/api/v1/collections/{_collectionName}/delete",
+            $"{_baseUrl}/delete",
             deleteRequest,
             ct);
 
@@ -305,7 +274,7 @@ public class ChromaVectorStore : IVectorStore
         };
 
         var response = await _httpClient.PostAsJsonAsync(
-            $"/api/v1/collections/{_collectionName}/delete",
+            $"{_baseUrl}/delete",
             deleteRequest,
             ct);
 
@@ -342,4 +311,10 @@ public class ChromaVectorStore : IVectorStore
         [JsonPropertyName("embeddings")]
         public List<float[]>? Embeddings { get; set; }
     }
+}
+
+public class ChromaVectorStoreConfig : VectorStoreConfig
+{
+    public string Tenant { get; set; }
+    public string Database { get; set; }
 }

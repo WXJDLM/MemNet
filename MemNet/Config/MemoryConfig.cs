@@ -27,8 +27,9 @@ public class MemoryConfig
 
 public class VectorStoreConfig
 {
-    public string Endpoint { get; set; } = "http://localhost:6333";
-    public string CollectionName { get; set; } = "memories";
+    public string Endpoint { get; set; }
+    public string CollectionName { get; set; }
+    public string CollectionId { get; set; }
     public string? ApiKey { get; set; }
 }
 

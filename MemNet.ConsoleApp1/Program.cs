@@ -2,6 +2,7 @@
 using MemNet;
 using MemNet.Abstractions;
 using MemNet.Models;
+using MemNet.VectorStores;
 using Microsoft.Extensions.DependencyInjection;
 
 var services = new ServiceCollection();
@@ -16,6 +17,13 @@ services.AddMemNet(config =>
     config.LLM.ApiKey = Environment.GetEnvironmentVariable("OpenAIChatKey");
 
     config.EnableReranking = true;
+}).WithChroma();
+services.Configure<ChromaVectorStoreConfig>(e =>
+{
+    e.Endpoint = "http://localhost:8000";
+    e.CollectionId = "a9e2f1f4-e2bf-4e86-bcda-115af5fe9b3b";
+    e.Database = "default";
+    e.Tenant = "default";
 });
 
 await using var sp = services.BuildServiceProvider();
@@ -33,6 +41,11 @@ await memoryService.AddAsync(new AddMemoryRequest
         {
             Role = "User",
             Content = "As a 18-years-old boy, I'm into Chinese food."
+        },
+        new MessageContent
+        {
+            Role = "User",
+            Content = "I'm 20 years old."
         }
     ],
     UserId = "user001"
@@ -40,7 +53,7 @@ await memoryService.AddAsync(new AddMemoryRequest
 
 var resp = await memoryService.SearchAsync(new SearchMemoryRequest
 {
-    Query = "What do I like?", //"Am I old?",
+    Query = "Am I old?",//""What do I like?", //"Am I old?",
     UserId = "user001"
 });
 Console.WriteLine("Search Results:");

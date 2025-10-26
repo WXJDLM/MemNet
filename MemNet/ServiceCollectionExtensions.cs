@@ -116,7 +116,7 @@ public static class ServiceCollectionExtensions
     public static IServiceCollection WithChroma(
         this IServiceCollection services)
     {
-        services.AddHttpClient<IVectorStore, ChromaVectorStore>();
+        services.AddHttpClient<IVectorStore, ChromaV2VectorStore>();
         return services;
     }
 }
