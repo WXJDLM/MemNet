@@ -31,7 +31,6 @@ public class VectorStoreConfig
     public string Host { get; set; } = "localhost";
     public int Port { get; set; } = 6333;
     public string CollectionName { get; set; } = "memories";
-    public int EmbeddingDimension { get; set; } = 1536;
     public string? ApiKey { get; set; }
 }
 
@@ -41,8 +40,6 @@ public class LLMConfig
     public string Model { get; set; } = "gpt-4";
     public string? ApiKey { get; set; }
     public string? Endpoint { get; set; }
-    public float Temperature { get; set; } = 0.7f;
-    public int MaxTokens { get; set; } = 2000;
 }
 
 public class EmbedderConfig
