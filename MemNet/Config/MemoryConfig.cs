@@ -8,7 +8,6 @@ public class MemoryConfig
     public VectorStoreConfig VectorStore { get; set; } = new();
     public LLMConfig LLM { get; set; } = new();
     public EmbedderConfig Embedder { get; set; } = new();
-    public GraphStoreConfig? GraphStore { get; set; }
 
     /// <summary>
     /// 去重阈值（余弦相似度）
@@ -53,12 +52,4 @@ public class EmbedderConfig
     public string? ApiKey { get; set; }
     public string? Endpoint { get; set; }
     public int Dimension { get; set; } = 1536;
-}
-
-public class GraphStoreConfig
-{
-    public string Provider { get; set; } = "neo4j";
-    public string Uri { get; set; } = "bolt://localhost:7687";
-    public string? Username { get; set; }
-    public string? Password { get; set; }
 }
