@@ -119,14 +119,4 @@ public static class ServiceCollectionExtensions
         services.AddHttpClient<IVectorStore, ChromaV2VectorStore>();
         return services;
     }
-    
-    /// <summary>
-    ///     Use Chroma(V2) vector store
-    /// </summary>
-    public static IServiceCollection WithChromaV1(
-        this IServiceCollection services)
-    {
-        services.AddHttpClient<IVectorStore, ChromaV1VectorStore>();
-        return services;
-    }
 }

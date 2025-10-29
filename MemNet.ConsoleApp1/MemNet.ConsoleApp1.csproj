@@ -9,6 +9,7 @@
 
     <ItemGroup>
       <ProjectReference Include="..\MemNet\MemNet.csproj" />
+        <PackageReference Include="HttpMataki.NET.Auto" Version="1.0.3"/>
     </ItemGroup>
 
 </Project>

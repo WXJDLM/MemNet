@@ -25,7 +25,7 @@ public class ChromaV2VectorStore : IVectorStore
     private readonly string _database;
     private readonly string _collectionId;
 
-    public ChromaV2VectorStore(HttpClient httpClient, IOptions<ChromaVectorStoreConfig> config)
+    public ChromaV2VectorStore(HttpClient httpClient, IOptions<ChromaV2VectorStoreConfig> config)
     {
         _httpClient = httpClient;
         var configValue = config.Value;
@@ -414,7 +414,7 @@ public class ChromaV2VectorStore : IVectorStore
     }
 }
 
-public class ChromaVectorStoreConfig : VectorStoreConfig
+public class ChromaV2VectorStoreConfig : VectorStoreConfig
 {
     public string Tenant { get; set; }
     public string Database { get; set; }

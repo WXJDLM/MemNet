@@ -1,9 +1,12 @@
 ﻿using System;
+using HttpMataki.NET.Auto;
 using MemNet;
 using MemNet.Abstractions;
 using MemNet.Models;
 using MemNet.VectorStores;
 using Microsoft.Extensions.DependencyInjection;
+
+//HttpClientAutoInterceptor.StartInterception();
 
 var services = new ServiceCollection();
 services.AddMemNet(config =>
@@ -17,21 +20,25 @@ services.AddMemNet(config =>
     config.LLM.ApiKey = Environment.GetEnvironmentVariable("OpenAIChatKey");
 
     //config.VectorStore.Endpoint = "http://localhost:6333";//Qdrant
-    config.VectorStore.Endpoint = "http://localhost:19530";//Milvus
-}).WithMilvusV2();//.WithQdrant();
-    /*
-    .WithChroma();
-services.Configure<ChromaVectorStoreConfig>(e =>
+    //config.VectorStore.Endpoint = "http://localhost:19530";//Milvus
+    //config.VectorStore.CollectionName = "c3";
+    config.VectorStore.Endpoint = "http://localhost:8000";
+});//.WithMilvusV2();//.WithQdrant();
+/*
+.WithChromaV2();
+
+services.Configure<ChromaV2VectorStoreConfig>(e =>
 {
-    e.Endpoint = "http://localhost:8000";
-    e.CollectionId = "a9e2f1f4-e2bf-4e86-bcda-115af5fe9b3b";
-    e.Database = "default";
-    e.Tenant = "default";
+e.Endpoint = "http://localhost:8000";
+e.CollectionId = "a9e2f1f4-e2bf-4e86-bcda-115af5fe9b3b";
+e.Database = "default";
+e.Tenant = "default";
 });*/
 
 await using var sp = services.BuildServiceProvider();
 var memoryService = sp.GetRequiredService<IMemoryService>();
 await memoryService.InitializeAsync(true);
+
 //await memoryService.DeleteAllAsync("user001");
 await memoryService.AddAsync(new AddMemoryRequest
 {

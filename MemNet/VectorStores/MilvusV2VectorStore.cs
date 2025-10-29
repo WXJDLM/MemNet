@@ -9,6 +9,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using MemNet.Abstractions;
 using MemNet.Config;
+using MemNet.Internals;
 using MemNet.Models;
 using Microsoft.Extensions.Options;
 
@@ -46,14 +47,14 @@ public class MilvusV2VectorStore : IVectorStore
         // Check if collection exists
         var checkResponse = await _httpClient.PostAsJsonAsync("/v2/vectordb/collections/describe", 
             new { collectionName = _collectionName }, ct);
-            
-        if (checkResponse.IsSuccessStatusCode)
+        await checkResponse.EnsureSuccessWithContentAsync();
+        var content = await checkResponse.Content.ReadAsStringAsync();
+        MilvusV2Response<MilvusV2CollectionInfo>? responseObj = JsonSerializer.Deserialize<MilvusV2Response<MilvusV2CollectionInfo>>(content);
+        if (responseObj != null && responseObj.Code == 0)
         {
-            // Collection exists, verify dimension matches
-            var result = await ReadResponseAsync<MilvusV2CollectionInfo>(checkResponse);
-            var existingDimension = result?.Fields
+            var existingDimension = responseObj.Data?.Fields
                 .SingleOrDefault(f => f.Name == "embedding")?.Params.SingleOrDefault(p=>p.Key=="dim")?.Value;
-                
+            
             if (Convert.ToInt32(existingDimension) != vectorSize)
             {
                 if (allowRecreation)
@@ -70,12 +71,17 @@ public class MilvusV2VectorStore : IVectorStore
                         "Set allowRecreation=true to automatically recreate the collection.");
                 }
             }
-            // Collection exists with correct dimension, do nothing
-            return;
         }
-
-        // Collection doesn't exist, create it
-        await CreateCollectionAsync(vectorSize, ct);
+        else if (responseObj != null && responseObj.Code == 100) //collection not found 
+        {
+            // Collection doesn't exist, create it
+            await CreateCollectionAsync(vectorSize, ct);
+        }
+        else
+        {
+            throw new InvalidOperationException(
+                $"Milvus returned error code {responseObj?.Code}: {responseObj?.Message}. Response: {content}");
+        }
     }
 
     private async Task CreateCollectionAsync(int vectorSize, CancellationToken ct)
@@ -171,7 +177,7 @@ public class MilvusV2VectorStore : IVectorStore
             annsField = "embedding",
             limit,
             outputFields = new[] { "id", "data", "userId", "agentId", "runId", "metadata", "createdAt", "updatedAt", "hash" },
-            filter = userId != null ? $"userId == \"{userId}\"" : (string?)null
+            filter = userId != null ? $"userId == \"{userId}\"" : (string?)null,
         };
 
         var response = await _httpClient.PostAsJsonAsync("/v2/vectordb/entities/search", searchRequest, ct);
@@ -209,7 +215,7 @@ public class MilvusV2VectorStore : IVectorStore
                 collectionName = _collectionName,
                 filter = $"userId == \"{userId}\"",
                 limit,
-                outputFields = new[] { "id", "data", "userId", "agentId", "runId", "metadata", "createdAt", "updatedAt", "hash" }
+                outputFields = new[] { "id", "data", "userId", "agentId", "runId", "metadata", "createdAt", "updatedAt", "hash" },
             };
         }
         else
@@ -223,7 +229,6 @@ public class MilvusV2VectorStore : IVectorStore
             };
         }
 
-        await Task.Delay(1000);
         var response = await _httpClient.PostAsJsonAsync("/v2/vectordb/entities/query", queryRequest, ct);
         var result = await ReadResponseAsync<MilvusV2QueryItem[]>(response);
 
