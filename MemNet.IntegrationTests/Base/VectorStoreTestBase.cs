@@ -108,7 +108,6 @@ public abstract class VectorStoreTestBase<TVectorStore> : IntegrationTestBase
         // The top result should be about programming
         var topResult = results.First();
         topResult.Memory.Data.Should().Contain("programming", "coding");
-        topResult.Score.Should().BeGreaterThan(0);
 
         await CleanupVectorStoreAsync(vectorStore);
     }

@@ -1,7 +1,6 @@
 using System;
 using System.Net.Http;
 using System.Threading.Tasks;
-using MemNet.Config;
 using MemNet.IntegrationTests.Base;
 using MemNet.VectorStores;
 using Microsoft.Extensions.Options;
@@ -22,7 +21,7 @@ public class ChromaIntegrationTests : VectorStoreTestBase<ChromaV2VectorStore>
             Endpoint = TestConfiguration.GetChromaEndpoint(),
             Tenant = "default_tenant",
             Database = "default_database",
-            CollectionId = Guid.NewGuid().ToString()
+            CollectionName = "C"+DateTime.Now.ToString("YYYYMMddHHmmss")
         });
 
         return new ChromaV2VectorStore(httpClient, config);
