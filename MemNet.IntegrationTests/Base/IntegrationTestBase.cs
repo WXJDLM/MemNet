@@ -10,20 +10,15 @@ namespace MemNet.IntegrationTests.Base;
 /// </summary>
 public abstract class IntegrationTestBase : IAsyncLifetime
 {
-    protected readonly DockerComposeFixture DockerFixture;
     protected readonly OpenAIFixture OpenAIFixture;
 
     protected IntegrationTestBase()
     {
-        DockerFixture = new DockerComposeFixture();
         OpenAIFixture = new OpenAIFixture();
     }
 
     public virtual async Task InitializeAsync()
     {
-        // Start Docker containers once
-        await DockerFixture.StartAsync();
-        
         // Verify OpenAI connection
         await VerifyOpenAIConnection();
     }
