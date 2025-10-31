@@ -55,10 +55,9 @@ jobs:
 
     - name: Run Integration Tests
       env:
-        OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-        TEST_CHROMA_ENDPOINT: http://localhost:8000
-        TEST_MILVUS_ENDPOINT: http://localhost:19530
-        TEST_QDRANT_ENDPOINT: http://localhost:6333
+        EMBEDDER_API_KEY: ${{ secrets.EMBEDDER_API_KEY }}
+        LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
+
       run: |
         dotnet test MemNet.IntegrationTests/MemNet.IntegrationTests.csproj \
           --no-build \
