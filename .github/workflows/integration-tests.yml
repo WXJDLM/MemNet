@@ -30,7 +30,7 @@ jobs:
           - 6334:6334
         
       milvus:
-        image: milvusdb/milvus:v2.4.4
+        image: milvusdb/milvus:latest
         ports:
           - 19530:19530
           - 9091:9091
@@ -39,12 +39,13 @@ jobs:
           MINIO_USE_EMBED: true
           ROCKSMQ_USE_EMBED: true
         options: >-
-          --entrypoint ""
-          milvus run standalone
+          --entrypoint /bin/bash
           --health-cmd "curl -f http://localhost:9091/healthz || exit 1"
           --health-interval 10s
           --health-timeout 5s
           --health-retries 10
+          --
+          -c "milvus run standalone"
 
     steps:
     - name: Checkout code
