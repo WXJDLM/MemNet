@@ -11,70 +11,69 @@ namespace MemNet.IntegrationTests.VectorStores;
 /// <summary>
 /// Integration tests for MilvusV2VectorStore
 /// </summary>
-// public class MilvusIntegrationTests : VectorStoreTestBase<MilvusV2VectorStore>
-// {
-//     
-//     public MilvusIntegrationTests()
-//     {
-//         _addDelay = true;
-//     }
-//     
-//     protected override MilvusV2VectorStore CreateVectorStore()
-//     {
-//         var httpClient = new HttpClient();
-//         var config = Options.Create(new MemoryConfig
-//         {
-//             VectorStore = new VectorStoreConfig
-//             {
-//                 Endpoint = TestConfiguration.GetMilvusEndpoint(),
-//                 CollectionName = GenerateUniqueCollectionName(),
-//                 ApiKey = "" // Optional authentication
-//             }
-//         });
-//
-//         return new MilvusV2VectorStore(httpClient, config);
-//     }
-//
-//     [Fact]
-//     public async Task EnsureCollectionExists_ShouldCreateCollection()
-//     {
-//         await TestEnsureCollectionExistsAsync();
-//     }
-//
-//     [Fact]
-//     public async Task InsertAndRetrieve_ShouldWorkCorrectly()
-//     {
-//         await TestInsertAndRetrieveAsync();
-//     }
-//
-//     [Fact]
-//     public async Task VectorSearch_ShouldReturnRelevantResults()
-//     {
-//         await TestVectorSearchAsync();
-//     }
-//
-//     [Fact]
-//     public async Task UpdateMemory_ShouldUpdateSuccessfully()
-//     {
-//         await TestUpdateMemoryAsync();
-//     }
-//
-//     [Fact]
-//     public async Task DeleteMemory_ShouldRemoveMemory()
-//     {
-//         await TestDeleteMemoryAsync();
-//     }
-//
-//     [Fact]
-//     public async Task ListMemories_ShouldFilterByUser()
-//     {
-//         await TestListMemoriesAsync();
-//     }
-//
-//     [Fact]
-//     public async Task BatchOperations_ShouldHandleMultipleMemories()
-//     {
-//         await TestBatchOperationsAsync();
-//     }
-// }
+public class MilvusIntegrationTests : VectorStoreTestBase<MilvusV2VectorStore>
+{
+    
+    public MilvusIntegrationTests()
+    {
+        _addDelay = true;
+    }
+    
+    protected override MilvusV2VectorStore CreateVectorStore()
+    {
+        var httpClient = new HttpClient();
+        var config = Options.Create(new MemoryConfig
+        {
+            VectorStore = new VectorStoreConfig
+            {
+                Endpoint = TestConfiguration.GetMilvusEndpoint(),
+                CollectionName = GenerateUniqueCollectionName(),
+            }
+        });
+
+        return new MilvusV2VectorStore(httpClient, config);
+    }
+
+    [Fact]
+    public async Task EnsureCollectionExists_ShouldCreateCollection()
+    {
+        await TestEnsureCollectionExistsAsync();
+    }
+
+    [Fact]
+    public async Task InsertAndRetrieve_ShouldWorkCorrectly()
+    {
+        await TestInsertAndRetrieveAsync();
+    }
+
+    [Fact]
+    public async Task VectorSearch_ShouldReturnRelevantResults()
+    {
+        await TestVectorSearchAsync();
+    }
+
+    [Fact]
+    public async Task UpdateMemory_ShouldUpdateSuccessfully()
+    {
+        await TestUpdateMemoryAsync();
+    }
+
+    [Fact]
+    public async Task DeleteMemory_ShouldRemoveMemory()
+    {
+        await TestDeleteMemoryAsync();
+    }
+
+    [Fact]
+    public async Task ListMemories_ShouldFilterByUser()
+    {
+        await TestListMemoriesAsync();
+    }
+
+    [Fact]
+    public async Task BatchOperations_ShouldHandleMultipleMemories()
+    {
+        await TestBatchOperationsAsync();
+    }
+}
 
