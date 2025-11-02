@@ -4,13 +4,9 @@ on:
   release:
     types: [ published ]
 
-jobs:
-  test:
-    runs-on: windows-latest
-  
+jobs: 
   pack:
     runs-on: windows-latest
-    needs: test
     if: github.event_name == 'release'
     
     steps:
