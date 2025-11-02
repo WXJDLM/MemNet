@@ -30,36 +30,40 @@ jobs:
           - 6334:6334
       etcd:
         image: quay.io/coreos/etcd:v3.5.5
-        environment:
-          ETCD_AUTO_COMPACTION_MODE: revision
-          ETCD_AUTO_COMPACTION_RETENTION: "1000"
-          ETCD_QUOTA_BACKEND_BYTES: "4294967296"
-          ETCD_SNAPSHOT_COUNT: "50000"
-        healthcheck:
-          test: ["CMD", "etcdctl", "endpoint", "health"]
         ports:
-          - "2379:2379"
-    
+          - 2379:2379
+        options: >-
+          --health-cmd="etcdctl endpoint health"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=10
+
       minio:
         image: minio/minio:RELEASE.2024-02-17T01-36-00Z
-        environment:
+        env:
           MINIO_ACCESS_KEY: minioadmin
           MINIO_SECRET_KEY: minioadmin
-        command: server /data
         ports:
-          - "9000:9000"
-    
+          - 9000:9000
+        options: >-
+          --health-cmd "curl -f http://localhost:9000/minio/health/live || exit 1"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=10
+        command: server /data
+
       milvus:
         image: milvusdb/milvus:latest
-        container_name: milvus
-        environment:
+        ports:
+          - 19530:19530
+        env:
           ETCD_ENDPOINTS: etcd:2379
           MINIO_ADDRESS: minio:9000
-        depends_on:
-          - etcd
-          - minio
-        ports:
-          - "19530:19530"
+        options: >-
+          --health-cmd "curl -f http://localhost:19530 || exit 1"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=20
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
