@@ -28,43 +28,22 @@ jobs:
         ports:
           - 6333:6333
           - 6334:6334
-      etcd:
-        image: quay.io/coreos/etcd:v3.5.5
-        ports:
-          - 2379:2379
-        options: >-
-          --health-cmd="etcdctl endpoint health"
-          --health-interval=5s
-          --health-timeout=5s
-          --health-retries=10
 
-      minio:
-        image: minio/minio:RELEASE.2024-02-17T01-36-00Z
-        env:
-          MINIO_ACCESS_KEY: minioadmin
-          MINIO_SECRET_KEY: minioadmin
-        ports:
-          - 9000:9000
-        options: >-
-          --health-cmd "curl -f http://localhost:9000/minio/health/live || exit 1"
-          --health-interval=5s
-          --health-timeout=5s
-          --health-retries=10
-        command: server /data
-
-      milvus:
-        image: milvusdb/milvus:latest
-        ports:
-          - 19530:19530
-        env:
-          ETCD_ENDPOINTS: etcd:2379
-          MINIO_ADDRESS: minio:9000
-        options: >-
-          --health-cmd "curl -f http://localhost:19530 || exit 1"
-          --health-interval=10s
-          --health-timeout=5s
-          --health-retries=20
     steps:
+    - name: Download Milvus standalone script
+      run: |
+        curl -sfL https://raw.githubusercontent.com/milvus-io/milvus/master/scripts/standalone_embed.sh -o standalone_embed.sh
+        chmod +x standalone_embed.sh
+
+    - name: Start Milvus standalone
+      run: |
+        bash standalone_embed.sh start
+        sleep 20  # wait for containers to be ready
+
+    - name: Check Milvus health
+      run: |
+        docker ps
+        curl -f http://localhost:9091/healthz || (echo "Milvus failed to start" && exit 1)
     - name: Checkout code
       uses: actions/checkout@v4
 
