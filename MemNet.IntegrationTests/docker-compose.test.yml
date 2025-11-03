@@ -51,7 +51,7 @@ services:
       - qdrant_data:/qdrant/storage
 
   redis:
-    image: redis/redis:latest
+    image: redis:latest
     container_name: memnet-test-redis
     ports:
       - "6379:6379"
