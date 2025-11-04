@@ -1,28 +1,33 @@
 # MemNet
-MemNet 是为 .NET 开发者设计的“自我完善”记忆层，旨在为基于大模型（LLM）的应用提供长期与短期记忆管理、相似度检索、记忆合并/精简和持久化等功能，方便在对话、推荐、个性化与场景感知应用中复用历史上下文。
-说人话就是：LLM是没有状态的，而MemNet帮你记住用户之前的行为和对话内容，从而让应用更智能、更个性化。
-## 为什么使用 MemNet
-- 将零散对话/事件转换为可检索的记忆，提高上下文感知能力。
-- 内置向量检索与记忆合并策略，降低重复记忆与噪声。
-- 支持多种存储后端（内存、Qdrant、Redis、Chroma、Milvus等），便于扩展与持久化。
-- 与任意 LLM/Embedding 提供方集成（可插拔 Embedding 层）。
 
-## 安装
-使用 dotnet CLI：
-```
+MemNet is a "self-improving" memory layer designed for .NET developers, providing long-term and short-term memory management, similarity search, memory consolidation/refinement, and persistence for LLM-based applications. It facilitates context reuse in conversations, recommendations, personalization, and context-aware applications.
+
+In simple terms: LLMs are stateless, and MemNet helps you remember users' previous behaviors and conversation content, making your applications smarter and more personalized.
+
+## Why Use MemNet
+
+- Transform scattered conversations/events into retrievable memories to enhance context awareness.
+- Built-in vector search and memory consolidation strategies to reduce duplicate memories and noise.
+- Support for multiple storage backends (in-memory, Qdrant, Redis, Chroma, Milvus, etc.) for easy expansion and persistence.
+- Integration with any LLM/Embedding provider (pluggable embedding layer).
+
+## Installation
+
+Using dotnet CLI:
+```bash
 dotnet add package MemNet
 ```
 
-使用 NuGet 控制台：
-```
+Using NuGet Package Manager Console:
+```powershell
 Install-Package MemNet
 ```
 
-## 快速开始
+## Quick Start
 
-### 1. 配置 appsettings.json
+### 1. Configure appsettings.json
 
-首先在项目的 `appsettings.json` 文件中配置 Embedder、LLM 和 VectorStore：
+First, configure the Embedder, LLM, and VectorStore in your project's `appsettings.json` file:
 
 ```json
 {
@@ -41,11 +46,11 @@ Install-Package MemNet
 }
 ```
 
-> **提示：** 为了安全起见，建议使用更安全的方式存储 API 密钥，而不是直接写在配置文件中。
+> **Tip:** For security purposes, it's recommended to use more secure methods to store API keys rather than writing them directly in the configuration file.
 
-### 2. 注册服务
+### 2. Register Services
 
-在 `Program.cs` 中注册 MemNet 服务：
+Register MemNet services in `Program.cs`:
 
 ```csharp
 using MemNet;
@@ -55,7 +60,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 
 var configuration = new ConfigurationBuilder()
-    .AddJsonFile("appsettings.json")//Need Nuget Package：Microsoft.Extensions.Configuration.Json
+    .AddJsonFile("appsettings.json") // Requires NuGet Package: Microsoft.Extensions.Configuration.Json
     .Build();
 
 var services = new ServiceCollection();
@@ -66,7 +71,7 @@ var memoryService = serviceProvider.GetRequiredService<IMemoryService>();
 await memoryService.InitializeAsync();
 ```
 
-### 3. 添加记忆
+### 3. Add Memories
 
 ```csharp
 await memoryService.AddAsync(new AddMemoryRequest
@@ -93,7 +98,7 @@ await memoryService.AddAsync(new AddMemoryRequest
 });
 ```
 
-### 4. 搜索记忆
+### 4. Search Memories
 
 ```csharp
 var searchResults = await memoryService.SearchAsync(new SearchMemoryRequest
@@ -108,68 +113,85 @@ foreach (var item in searchResults)
     Console.WriteLine($"- {item.Memory.Data}");
 }
 ```
-执行结果：
+
+Execution result:
 ```
 Search Results:
 - Cuisine preference: Chinese food
 - Allergy: nuts
 ```
 
-### 5. 使用不同的向量存储
-MemNet 默认使用内存向量存储，适合开发和测试环境。在生产环境中，建议使用持久化的向量存储后端，以确保记忆数据的持久化和可扩展性。
+### 5. Using Different Vector Stores
 
-MemNet 支持多种向量存储后端：
+MemNet uses in-memory vector storage by default, which is suitable for development and testing environments. For production environments, it's recommended to use persistent vector storage backends to ensure data persistence and scalability.
 
+MemNet supports multiple vector storage backends:
 
-#### 使用 Qdrant
+#### Using Qdrant
 
-在appsettings.json中增加向量数据库配置（修改如下配置中的值为实际的值）:
+Add vector database configuration to appsettings.json (replace the values with your actual values):
 ```
 "VectorStore": {
-    "Endpoint": "your-Qdrant-endpoint，比如http://localhost:6333",
-    "ApiKey": "your-Qdrant-apikey(可选的)",
-    "CollectionName": "your-collection-name(可选的，默认是'memnet_collection')"
+    "Endpoint": "your-Qdrant-endpoint, e.g., http://localhost:6333",
+    "ApiKey": "your-Qdrant-apikey (optional)",
+    "CollectionName": "your-collection-name (optional, default is 'memnet_collection')"
 }
 ```
-然后修改注册代码：
+
+Then modify the registration code:
 ```csharp
 services.AddMemNet(configuration).WithQdrant();
 ```
 
-#### 使用 Chroma
+#### Using Chroma
 
-在appsettings.json中增加向量数据库配置（修改如下配置中的值为实际的值）:
+Add vector database configuration to appsettings.json (replace the values with your actual values):
 ```
 "VectorStore": {
-    "Endpoint": "your-Qdrant-endpoint，比如http://localhost:6333",
-    "ApiKey": "your-Qdrant-apikey(可选的)",
-    "CollectionName": "your-collection-name(可选的，默认是'memnet_collection')"
+    "Endpoint": "your-Chroma-endpoint, e.g., http://localhost:8000",
+    "ApiKey": "your-Chroma-apikey (optional)",
+    "CollectionName": "your-collection-name (optional, default is 'memnet_collection')",
+    "Database": "YourDatabaseName",
+    "Tenant": "YourTenantName"
 }
 ```
-然后修改注册代码：
+
+Then modify the registration code:
 ```csharp
-services.AddMemNet(configuration).WithQdrant();
+services.AddMemNet(configuration).WithChromaV2();
 ```
 
-#### 使用 Milvus
-在appsettings.json中增加向量数据库配置（修改如下配置中的值为实际的值）:
+#### Using Milvus
+
+Add vector database configuration to appsettings.json (replace the values with your actual values):
 ```
 "VectorStore": {
-    "Endpoint": "your-Qdrant-endpoint，比如http://localhost:6333",
-    "ApiKey": "your-Qdrant-apikey(可选的)",
-    "CollectionName": "your-collection-name(可选的，默认是'memnet_collection')"
+    "Endpoint": "your-Milvus-endpoint, e.g., http://localhost:19530",
+    "ApiKey": "your-Milvus-apikey (optional)",
+    "CollectionName": "your-collection-name (optional, default is 'memnet_collection')"
 }
 ```
-然后修改注册代码：
+
+Then modify the registration code:
 ```csharp
-services.AddMemNet(configuration).WithQdrant();
+services.AddMemNet(configuration).WithMilvusV2();
 ```
 
-#### 使用 Redis（需要安装 MemNet.Redis 包）
+#### Using Redis (Requires MemNet.Redis package)
+
 ```csharp
-services.AddMemNet(config => { /* ... */ }).WithMemNetRedis("localhost:6379");
+services.AddMemNet(configuration).WithMemNetRedis("connection-string, e.g., localhost:6379");
 ```
 
+## Advanced Examples
 
+Coming soon...
 
-## 进阶示例
+## Contributing
+
+Contributions are welcome! Please feel free to submit a Pull Request.
+
+## License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+

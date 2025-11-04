@@ -117,7 +117,7 @@ public static class ServiceCollectionExtensions
         this IServiceCollection services,
         IConfiguration configuration)
     {
-        services.Configure<ChromaV2VectorStoreConfig>(configuration.GetSection("MemNet"));
+        services.Configure<ChromaV2VectorStoreConfig>(configuration.GetSection("MemNet:VectorStore"));
         services.AddHttpClient<IVectorStore, ChromaV2VectorStore>();
         return services;
     }

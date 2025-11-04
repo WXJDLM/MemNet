@@ -3,8 +3,6 @@ name: publish NuGet Packages
 on:
   release:
     types: [ published ]
-    tags:
-      - '*memnet.main*'
 
 jobs: 
   pack:
