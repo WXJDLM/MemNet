@@ -3,6 +3,7 @@ using MemNet.Abstractions;
 using MemNet.Config;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 using StackExchange.Redis;
 
 namespace MemNet.Redis;
@@ -16,28 +17,27 @@ public static class RedisServiceCollectionExtensions
     /// Add MemNet with Redis vector store support using VectorStoreConfig
     /// </summary>
     /// <param name="services">Service collection</param>
-    /// <param name="configuration">configuration</param>
     /// <param name="configureOptions">Optional Redis configuration options</param>
     public static IServiceCollection WithMemNetRedis(
         this IServiceCollection services,
-        IConfiguration configuration,
         Action<ConfigurationOptions>? configureOptions = null)
     {
         services.AddSingleton<IConnectionMultiplexer>(sp =>
         {
-            var config = sp.GetRequiredService<VectorStoreConfig>();
+            var memConfig = sp.GetRequiredService<IOptions<MemoryConfig>>().Value;
+            var vectorStoreConfig = memConfig.VectorStore;
 
-            if (string.IsNullOrEmpty(config.Endpoint))
+            if (string.IsNullOrEmpty(vectorStoreConfig.Endpoint))
             {
                 throw new InvalidOperationException("VectorStoreConfig.Endpoint is required for Redis connection");
             }
 
-            var options = ConfigurationOptions.Parse(config.Endpoint);
+            var options = ConfigurationOptions.Parse(vectorStoreConfig.Endpoint);
 
-            if (!string.IsNullOrEmpty(config.ApiKey))
+            if (!string.IsNullOrEmpty(vectorStoreConfig.ApiKey))
             {
                 // Parse ApiKey in "UserName:Password" format
-                var parts = config.ApiKey!.Split([':'], 2);
+                var parts = vectorStoreConfig.ApiKey!.Split([':'], 2);
                 if (parts.Length == 2)
                 {
                     options.User = parts[0];
@@ -46,7 +46,7 @@ public static class RedisServiceCollectionExtensions
                 else
                 {
                     // Fallback: treat as password only
-                    options.Password = config.ApiKey;
+                    options.Password = vectorStoreConfig.ApiKey;
                 }
             }
 
@@ -56,7 +56,6 @@ public static class RedisServiceCollectionExtensions
         });
 
         services.AddSingleton<IVectorStore, RedisVectorStore>();
-        services.Configure<VectorStoreConfig>(configuration.GetSection("MemNet:VectorStore"));
         return services;
     }
 
@@ -64,12 +63,10 @@ public static class RedisServiceCollectionExtensions
     /// Add MemNet with Redis vector store support
     /// </summary>
     /// <param name="services">Service collection</param>
-    /// <param name="configuration">configuration</param>
     /// <param name="connectionString">Redis connection string</param>
     /// <param name="configureOptions">Optional Redis configuration options</param>
     public static IServiceCollection WithMemNetRedis(
         this IServiceCollection services,
-        IConfiguration configuration,
         string connectionString,
         Action<ConfigurationOptions>? configureOptions = null)
     {
@@ -86,7 +83,6 @@ public static class RedisServiceCollectionExtensions
         services.AddSingleton<IConnectionMultiplexer>(_ => ConnectionMultiplexer.Connect(options));
         // Register RedisVectorStore
         services.AddSingleton<IVectorStore, RedisVectorStore>();
-        services.Configure<VectorStoreConfig>(configuration.GetSection("MemNet:VectorStore"));
         return services;
     }
 }

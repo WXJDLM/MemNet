@@ -191,7 +191,7 @@ Add vector database configuration to appsettings.json (replace the values with y
 ```
 
 ```csharp
-services.AddMemNet(configuration).WithMemNetRedis("connection-string, e.g., localhost:6379");
+services.AddMemNet().WithMemNetRedis("connection-string, e.g., localhost:6379");
 ```
 
 #### More Vector Store Support

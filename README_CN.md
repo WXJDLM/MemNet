@@ -181,7 +181,7 @@ Add vector database configuration to appsettings.json (replace the values with y
 ```
 
 ```csharp
-services.AddMemNet(configuration).WithMemNetRedis(configuration);
+services.AddMemNet(configuration).WithMemNetRedis();
 ```
 #### 更多向量存储的支持
 
