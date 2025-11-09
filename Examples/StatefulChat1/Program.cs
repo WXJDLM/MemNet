@@ -29,7 +29,7 @@ var extGenDeploymentName = memConfig.LLM.Model;
 var completeChatClient = new CompleteChatClient(textGenEndpoint, extGenDeploymentName, chatApiKey);
 while (true)
 {
-    Console.Write("你：");
+    Console.Write("You：");
     string question = Console.ReadLine();
     var searchResults = await memoryService.SearchAsync(new SearchMemoryRequest
     {
@@ -43,8 +43,7 @@ while (true)
     var answer = await completeChatClient.GenerateTextAsync(question, memory);
     Console.Write("AI：");
     Console.WriteLine(answer);
-
-    // 保存新的记忆
+    
     await memoryService.AddAsync(new AddMemoryRequest
     {
         Messages =
