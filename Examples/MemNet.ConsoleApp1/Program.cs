@@ -12,19 +12,19 @@ using Microsoft.Extensions.DependencyInjection;
 var services = new ServiceCollection();
 services.AddMemNet(config =>
 {
-    config.Embedder.Endpoint = "https://personalopenai1.openai.azure.com/openai/v1/";
-    config.Embedder.Model = "text-embedding-3-large";
-    config.Embedder.ApiKey = Environment.GetEnvironmentVariable("OpenAIEmbeddingKey");
+    config.Embedder.Endpoint = "https://ark.cn-beijing.volces.com/api/v3/";
+    config.Embedder.Model = "doubao-embedding-text-240715";
+    config.Embedder.ApiKey = "37ca8174-cde5-4eb2-8d97-e4d299cc89d8";
 
-    config.LLM.Endpoint = "https://yangz-mf8s64eg-eastus2.cognitiveservices.azure.com/openai/v1/";
-    config.LLM.Model = "gpt-5-nano";
-    config.LLM.ApiKey = Environment.GetEnvironmentVariable("OpenAIChatKey");
+    config.LLM.Endpoint = "https://ark.cn-beijing.volces.com/api/v3/";
+    config.LLM.Model = "doubao-1-5-pro-32k-250115";
+    config.LLM.ApiKey = "37ca8174-cde5-4eb2-8d97-e4d299cc89d8";
 
     //config.VectorStore.Endpoint = "http://localhost:6333";//Qdrant
     //config.VectorStore.Endpoint = "http://localhost:19530";//Milvus
     //config.VectorStore.CollectionName = "c3";
     config.VectorStore.Endpoint = "http://localhost:8000";
-});//.WithMemNetRedis("localhost:6379");//.WithMilvusV2();//.WithQdrant();
+}).WithMemNetRedis("110.41.143.33:6379");//.WithMilvusV2();//.WithQdrant();
 /*
 .WithChromaV2();
 
