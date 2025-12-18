@@ -1,18 +1,19 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading;
-using System.Threading.Tasks;
 using MemNet.Abstractions;
 using MemNet.Config;
 using MemNet.Models;
 using Microsoft.Extensions.Options;
-using StackExchange.Redis;
 // 保留原有引用（但运行时会忽略RediSearch相关命令）
 using NRedisStack;
 using NRedisStack.RedisStackCommands;
 using NRedisStack.Search;
 using NRedisStack.Search.Literals.Enums;
+using StackExchange.Redis;
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Net;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace MemNet.Redis;
 
@@ -29,6 +30,11 @@ public class RedisVectorStore : IVectorStore
     // 新增：兼容Windows Redis的索引标记键（仅用于模拟索引存在性，无功能改动）
     private readonly string _indexFlagKey;
 
+    // 核心全局变量：标记Redis是否支持RediSearch（只需判断一次，缓存结果）
+    private bool? _isRediSearchSupported;
+    // 线程安全锁：确保只执行一次兼容性判断
+    private readonly object _redisSearchCheckLock = new();
+
     public RedisVectorStore(IConnectionMultiplexer redis, IOptions<MemoryConfig> config)
     {
         _redis = redis ?? throw new ArgumentNullException(nameof(redis));
@@ -40,19 +46,64 @@ public class RedisVectorStore : IVectorStore
         _indexFlagKey = $"flag:{_indexName}";
     }
 
+    /// <summary>
+    /// 全局兼容性判断方法：检查Redis是否支持RediSearch（结果缓存，只判断一次）
+    /// </summary>
+    /// <returns>是否支持RediSearch</returns>
+    private async Task<bool> CheckRediSearchSupportAsync()
+    {
+        // 双重检查锁定：确保线程安全且只执行一次判断
+        if (_isRediSearchSupported.HasValue)
+        {
+            return _isRediSearchSupported.Value;
+        }
+        lock (_redisSearchCheckLock)
+        {
+            if (_isRediSearchSupported.HasValue)
+            {
+                return _isRediSearchSupported.Value;
+            }
+
+            try
+            {
+                // 尝试执行FT._LIST命令判断是否支持RediSearch
+                SearchCommands ft = _db.FT();
+                _ = ft._List();
+                _isRediSearchSupported = true;
+            }
+            catch (RedisServerException ex) when (ex.Message.Contains("unknown command") ||
+                                                ex.Message.Contains("FT._LIST") ||
+                                                ex.Message.Contains("FT.CREATE") ||
+                                                ex.Message.Contains("FT.SEARCH"))
+            {
+                // 捕获到未知命令异常，说明不支持RediSearch（Windows Redis）
+                _isRediSearchSupported = false;
+            }
+            catch
+            {
+                // 其他异常也默认标记为不支持
+                _isRediSearchSupported = false;
+            }
+
+            return _isRediSearchSupported.Value;
+        }
+    }
+
     public async Task EnsureCollectionExistsAsync(int vectorSize, bool allowRecreation, CancellationToken ct = default)
     {
         bool indexExists = false;
-        try
+        bool isRediSearchSupported = await CheckRediSearchSupportAsync();
+
+        if (isRediSearchSupported)
         {
-            var ft = _db.FT();
-            // 保留原有逻辑：优先尝试RediSearch的_LIST命令
+            // 支持RediSearch：使用原有逻辑
+            SearchCommands ft = _db.FT();
             RedisResult[] indexes = ft._List();
             indexExists = indexes.Any(e => _indexName.Equals((string)e!));
         }
-        catch (RedisServerException ex) when (ex.Message.Contains("unknown command") || ex.Message.Contains("FT._LIST"))
+        else
         {
-            // Windows Redis无RediSearch：降级用普通KEY检查索引标记
+            // 不支持RediSearch：使用索引标记键判断
             indexExists = await _db.KeyExistsAsync(_indexFlagKey);
         }
 
@@ -60,15 +111,15 @@ public class RedisVectorStore : IVectorStore
         {
             if (allowRecreation)
             {
-                try
+                if (isRediSearchSupported)
                 {
-                    // 保留原有逻辑：尝试删除RediSearch索引
-                    _db.FT().DropIndex(_indexName);
+                    // 支持RediSearch：删除真实索引
+                    _ = _db.FT().DropIndex(_indexName);
                 }
-                catch (RedisServerException)
+                else
                 {
-                    // 降级：删除索引标记
-                    await _db.KeyDeleteAsync(_indexFlagKey);
+                    // 不支持RediSearch：删除索引标记
+                    _ = await _db.KeyDeleteAsync(_indexFlagKey);
                 }
                 await CreateIndexAsync(vectorSize);
             }
@@ -82,10 +133,13 @@ public class RedisVectorStore : IVectorStore
     // 改动：原CreateIndexAsync参数简化（无功能变化，仅适配兼容逻辑）
     private async Task CreateIndexAsync(int vectorSize)
     {
-        try
+        bool isRediSearchSupported = await CheckRediSearchSupportAsync();
+
+        if (isRediSearchSupported)
         {
-            var ft = _db.FT();
-            var schema = new Schema()
+            // 支持RediSearch：使用原有创建逻辑
+            SearchCommands ft = _db.FT();
+            Schema schema = new Schema()
                 .AddTextField("id")
                 .AddTextField("data")
                 .AddTextField("user_id")
@@ -113,17 +167,17 @@ public class RedisVectorStore : IVectorStore
                 throw new Exception("Failed to create Redis vector index.");
             }
         }
-        catch (RedisServerException ex) when (ex.Message.Contains("unknown command") || ex.Message.Contains("FT.CREATE"))
+        else
         {
-            // Windows Redis无RediSearch：仅创建索引标记（保留原有逻辑不中断）
-            await _db.StringSetAsync(_indexFlagKey, "exists");
+            // 不支持RediSearch：仅创建索引标记（保留原有逻辑不中断）
+            _ = await _db.StringSetAsync(_indexFlagKey, "exists");
         }
     }
 
-    // 以下所有方法完全保留原有逻辑（变量名/逻辑无任何修改）
+    // 以下所有方法完全保留原有逻辑，仅优化SearchAsync和ListAsync的异常处理逻辑
     public async Task InsertAsync(List<MemoryItem> memories, CancellationToken ct = default)
     {
-        foreach (var memory in memories)
+        foreach (MemoryItem memory in memories)
         {
             var key = $"{_keyPrefix}{memory.Id}";
             var hashEntries = new HashEntry[]
@@ -132,7 +186,7 @@ public class RedisVectorStore : IVectorStore
                 new("data", memory.Data),
                 new("user_id", memory.UserId ?? string.Empty),
                 new("hash", memory.Hash ?? string.Empty),
-                new("metadata", System.Text.Json.JsonSerializer.Serialize(memory.Metadata ?? new Dictionary<string, object>())),
+                new("metadata", System.Text.Json.JsonSerializer.Serialize(memory.Metadata ?? [])),
                 new("created_at", memory.CreatedAt.Ticks),
                 new("updated_at", memory.UpdatedAt?.Ticks ?? 0),
                 new("embedding", SerializeVector(memory.Embedding))
@@ -144,7 +198,7 @@ public class RedisVectorStore : IVectorStore
 
     public async Task UpdateAsync(List<MemoryItem> memories, CancellationToken ct = default)
     {
-        foreach (var memory in memories)
+        foreach (MemoryItem memory in memories)
         {
             var key = $"{_keyPrefix}{memory.Id}";
 
@@ -154,7 +208,7 @@ public class RedisVectorStore : IVectorStore
                 {
                     new("data", memory.Data),
                     new("hash", memory.Hash ?? string.Empty),
-                    new("metadata", System.Text.Json.JsonSerializer.Serialize(memory.Metadata ?? new Dictionary<string, object>())),
+                    new("metadata", System.Text.Json.JsonSerializer.Serialize(memory.Metadata ?? [])),
                     new("updated_at", memory.UpdatedAt?.Ticks ?? DateTime.UtcNow.Ticks),
                     new("embedding", SerializeVector(memory.Embedding))
                 };
@@ -164,68 +218,175 @@ public class RedisVectorStore : IVectorStore
         }
     }
 
-    public Task<List<MemorySearchResult>> SearchAsync(float[] queryVector, string? userId = null, int limit = 100, CancellationToken ct = default)
+    public async Task<List<MemorySearchResult>> SearchAsync(float[] queryVector, string? userId = null, int limit = 100, CancellationToken ct = default)
     {
-        var ft = _db.FT();
+        bool isRediSearchSupported = await CheckRediSearchSupportAsync();
 
-        var queryStr = userId != null ? $"@user_id:{EscapeRedisQuery(userId)}" : "*";
-
-        var query = new Query(queryStr)
-            .SetSortBy("__embedding_score")
-            .Limit(0, limit)
-            .ReturnFields("id", "data", "user_id", "hash", "metadata", "created_at", "updated_at", "embedding", "__embedding_score")
-            .Dialect(2);
-
-        var vectorBytes = SerializeVector(queryVector);
-        query.AddParam("query_vector", vectorBytes);
-        query.AddParam("BLOB", vectorBytes);
-
-        var searchQuery = $"{queryStr}=>[KNN {limit} @embedding $query_vector AS __embedding_score]";
-        var fullQuery = new Query(searchQuery)
-            .SetSortBy("__embedding_score")
-            .Limit(0, limit)
-            .ReturnFields("id", "data", "user_id", "hash", "metadata", "created_at", "updated_at", "__embedding_score")
-            .Dialect(2);
-
-        fullQuery.AddParam("query_vector", vectorBytes);
-
-        var results = ft.Search(_indexName, fullQuery);
-
-        var searchResults = new List<MemorySearchResult>();
-
-        foreach (var doc in results.Documents)
+        if (isRediSearchSupported)
         {
-            var memoryItem = ParseMemoryItem(doc);
-            var scoreValue = doc["__embedding_score"];
-            var score = !scoreValue.IsNull && float.TryParse(scoreValue.ToString(), out var s)
-                ? 1.0f - s
-                : 0.0f;
+            // 支持RediSearch：使用原有搜索逻辑
+            SearchCommands ft = _db.FT();
+            var queryStr = userId != null ? $"@user_id:{EscapeRedisQuery(userId)}" : "*";
+            Query query = new Query(queryStr)
+                .SetSortBy("__embedding_score")
+                .Limit(0, limit)
+                .ReturnFields("id", "data", "user_id", "hash", "metadata", "created_at", "updated_at", "embedding", "__embedding_score")
+                .Dialect(2);
 
-            searchResults.Add(new MemorySearchResult
+            var vectorBytes = SerializeVector(queryVector);
+            _ = query.AddParam("query_vector", vectorBytes);
+            _ = query.AddParam("BLOB", vectorBytes);
+
+            var searchQuery = $"{queryStr}=>[KNN {limit} @embedding $query_vector AS __embedding_score]";
+            Query fullQuery = new Query(searchQuery)
+                .SetSortBy("__embedding_score")
+                .Limit(0, limit)
+                .ReturnFields("id", "data", "user_id", "hash", "metadata", "created_at", "updated_at", "__embedding_score")
+                .Dialect(2);
+
+            _ = fullQuery.AddParam("query_vector", vectorBytes);
+
+            SearchResult results = ft.Search(_indexName, fullQuery);
+            var searchResults = new List<MemorySearchResult>();
+
+            foreach (Document doc in results.Documents)
             {
-                Id = memoryItem.Id,
-                Memory = memoryItem,
-                Score = score
-            });
-        }
+                MemoryItem memoryItem = ParseMemoryItem(doc);
+                RedisValue scoreValue = doc["__embedding_score"];
+                var score = !scoreValue.IsNull && float.TryParse(scoreValue.ToString(), out var s)
+                    ? 1.0f - s
+                    : 0.0f;
 
-        return Task.FromResult(searchResults);
+                searchResults.Add(new MemorySearchResult
+                {
+                    Id = memoryItem.Id,
+                    Memory = memoryItem,
+                    Score = score
+                });
+            }
+
+            return searchResults;
+        }
+        else
+        {
+            // 不支持RediSearch：使用降级搜索逻辑
+            return await FallbackSearchAsync(queryVector, userId, limit, ct);
+        }
     }
 
-    public Task<List<MemoryItem>> ListAsync(string? userId = null, int limit = 100, CancellationToken ct = default)
+    public async Task<List<MemoryItem>> ListAsync(string? userId = null, int limit = 100, CancellationToken ct = default)
     {
-        var ft = _db.FT();
+        bool isRediSearchSupported = await CheckRediSearchSupportAsync();
 
-        var queryStr = userId != null ? $"@user_id:{EscapeRedisQuery(userId)}" : "*";
-        var query = new Query(queryStr)
-            .SetSortBy("created_at", false)
-            .Limit(0, limit)
-            .ReturnFields("id", "data", "user_id", "hash", "metadata", "created_at", "updated_at", "embedding")
-            .Dialect(2);
+        if (isRediSearchSupported)
+        {
+            // 支持RediSearch：使用原有列表查询逻辑
+            SearchCommands ft = _db.FT();
+            var queryStr = userId != null ? $"@user_id:{EscapeRedisQuery(userId)}" : "*";
+            Query query = new Query(queryStr)
+                .SetSortBy("created_at", false)
+                .Limit(0, limit)
+                .ReturnFields("id", "data", "user_id", "hash", "metadata", "created_at", "updated_at", "embedding")
+                .Dialect(2);
 
-        var results = ft.Search(_indexName, query);
+            SearchResult results = ft.Search(_indexName, query);
+            return results.Documents.Select(ParseMemoryItem).ToList();
+        }
+        else
+        {
+            // 不支持RediSearch：使用降级列表查询逻辑
+            return await FallbackListAsync(userId, limit, ct);
+        }
+    }
 
-        return Task.FromResult(results.Documents.Select(ParseMemoryItem).ToList());
+    // 新增：降级搜索实现（余弦相似度计算）
+    private async Task<List<MemorySearchResult>> FallbackSearchAsync(float[] queryVector, string? userId, int limit, CancellationToken ct)
+    {
+        // 遍历所有以_keyPrefix开头的Key
+        EndPoint[] endpoints = _redis.GetEndPoints();
+        IServer server = _redis.GetServer(endpoints.First());
+        IEnumerable<RedisKey> keys = server.Keys(_db.Database, $"{_keyPrefix}*", pageSize: limit * 10);
+
+        var candidates = new List<(MemoryItem Item, float Similarity)>();
+        foreach (RedisKey key in keys)
+        {
+            HashEntry[] hash = await _db.HashGetAllAsync(key);
+            if (hash.Length == 0)
+            {
+                continue;
+            }
+
+            MemoryItem item = ParseMemoryItem(hash);
+            // 过滤用户ID
+            if (userId != null && item.UserId != userId)
+            {
+                continue;
+            }
+
+            // 计算余弦相似度
+            var similarity = CalculateCosineSimilarity(queryVector, item.Embedding);
+            candidates.Add((item, similarity));
+        }
+
+        // 按相似度排序取前N
+        return candidates.OrderByDescending(x => x.Similarity)
+                         .Take(limit)
+                         .Select(x => new MemorySearchResult
+                         {
+                             Id = x.Item.Id,
+                             Memory = x.Item,
+                             Score = x.Similarity
+                         })
+                         .ToList();
+    }
+
+    // 新增：降级列表查询实现
+    private async Task<List<MemoryItem>> FallbackListAsync(string? userId, int limit, CancellationToken ct)
+    {
+        EndPoint[] endpoints = _redis.GetEndPoints();
+        IServer server = _redis.GetServer(endpoints.First());
+        IEnumerable<RedisKey> keys = server.Keys(_db.Database, $"{_keyPrefix}*", pageSize: limit);
+
+        var items = new List<MemoryItem>();
+        foreach (RedisKey key in keys)
+        {
+            HashEntry[] hash = await _db.HashGetAllAsync(key);
+            if (hash.Length == 0)
+            {
+                continue;
+            }
+
+            MemoryItem item = ParseMemoryItem(hash);
+            if (userId == null || item.UserId == userId)
+            {
+                items.Add(item);
+            }
+            if (items.Count >= limit)
+            {
+                break;
+            }
+        }
+
+        return items.OrderByDescending(x => x.CreatedAt).ToList();
+    }
+
+    // 新增：余弦相似度计算
+    private float CalculateCosineSimilarity(float[] vec1, float[] vec2)
+    {
+        if (vec1.Length != vec2.Length || vec1.Length == 0)
+        {
+            return 0f;
+        }
+
+        float dot = 0f, mag1 = 0f, mag2 = 0f;
+        for (int i = 0; i < vec1.Length; i++)
+        {
+            dot += vec1[i] * vec2[i];
+            mag1 += vec1[i] * vec1[i];
+            mag2 += vec2[i] * vec2[i];
+        }
+
+        return mag1 == 0 || mag2 == 0 ? 0f : dot / (float)Math.Sqrt(mag1 * mag2);
     }
 
     public async Task<MemoryItem?> GetAsync(string memoryId, CancellationToken ct = default)
@@ -237,27 +398,22 @@ public class RedisVectorStore : IVectorStore
             return null;
         }
 
-        var hash = await _db.HashGetAllAsync(key);
+        HashEntry[] hash = await _db.HashGetAllAsync(key);
 
-        if (hash.Length == 0)
-        {
-            return null;
-        }
-
-        return ParseMemoryItem(hash);
+        return hash.Length == 0 ? null : ParseMemoryItem(hash);
     }
 
     public async Task DeleteAsync(string memoryId, CancellationToken ct = default)
     {
         var key = $"{_keyPrefix}{memoryId}";
-        await _db.KeyDeleteAsync(key);
+        _ = await _db.KeyDeleteAsync(key);
     }
 
     public async Task DeleteByUserAsync(string userId, CancellationToken ct = default)
     {
-        var memories = await ListAsync(userId, limit: 10000, ct);
+        List<MemoryItem> memories = await ListAsync(userId, limit: 10000, ct);
 
-        foreach (var memory in memories)
+        foreach (MemoryItem memory in memories)
         {
             await DeleteAsync(memory.Id, ct);
         }
@@ -268,7 +424,7 @@ public class RedisVectorStore : IVectorStore
         var dict = new Dictionary<string, RedisValue>();
         foreach (var key in new[] { "id", "data", "user_id", "hash", "metadata", "created_at", "updated_at", "embedding" })
         {
-            var value = doc[key];
+            RedisValue value = doc[key];
             if (!value.IsNull)
             {
                 dict[key] = value;
@@ -279,15 +435,15 @@ public class RedisVectorStore : IVectorStore
 
     private MemoryItem ParseMemoryItem(HashEntry[] hash)
     {
-        var dict = hash.ToDictionary(h => h.Name.ToString(), h => h.Value);
+        Dictionary<string, RedisValue> dict = hash.ToDictionary(h => h.Name.ToString(), h => h.Value);
         return ParseMemoryItemFromDict(dict);
     }
 
     private MemoryItem ParseMemoryItemFromDict(Dictionary<string, RedisValue> dict)
     {
-        var metadata = dict.ContainsKey("metadata") && !string.IsNullOrEmpty(dict["metadata"])
+        Dictionary<string, object>? metadata = dict.ContainsKey("metadata") && !string.IsNullOrEmpty(dict["metadata"])
             ? System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, object>>(dict["metadata"])
-            : new Dictionary<string, object>();
+            : [];
 
         var embedding = dict.ContainsKey("embedding") && !string.IsNullOrEmpty(dict["embedding"])
             ? DeserializeVector((byte[])dict["embedding"])
@@ -297,8 +453,8 @@ public class RedisVectorStore : IVectorStore
             ? ct
             : DateTime.UtcNow.Ticks;
 
-        var updatedAtTicks = dict.ContainsKey("updated_at") && long.TryParse(dict["updated_at"], out var ut) && ut > 0
-            ? (DateTime?)new DateTime(ut)
+        DateTime? updatedAtTicks = dict.ContainsKey("updated_at") && long.TryParse(dict["updated_at"], out var ut) && ut > 0
+            ? new DateTime(ut)
             : null;
 
         return new MemoryItem
