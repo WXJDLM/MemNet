@@ -14,17 +14,17 @@ services.AddMemNet(config =>
 {
     config.Embedder.Endpoint = "https://ark.cn-beijing.volces.com/api/v3/";
     config.Embedder.Model = "doubao-embedding-text-240715";
-    config.Embedder.ApiKey = "37ca8174-cde5-4eb2-8d97-e4d299cc89d8";
+    config.Embedder.ApiKey = "123";
 
     config.LLM.Endpoint = "https://ark.cn-beijing.volces.com/api/v3/";
     config.LLM.Model = "doubao-1-5-pro-32k-250115";
-    config.LLM.ApiKey = "37ca8174-cde5-4eb2-8d97-e4d299cc89d8";
+    config.LLM.ApiKey = "123";
 
     //config.VectorStore.Endpoint = "http://localhost:6333";//Qdrant
     //config.VectorStore.Endpoint = "http://localhost:19530";//Milvus
     //config.VectorStore.CollectionName = "c3";
     config.VectorStore.Endpoint = "http://localhost:8000";
-}).WithMemNetRedis("110.41.143.33:6379");//.WithMilvusV2();//.WithQdrant();
+}).WithMemNetRedis("110.41.143.00:6379");//.WithMilvusV2();//.WithQdrant();
 /*
 .WithChromaV2();
 
