@@ -1,6 +1,7 @@
 using MemNet.Abstractions;
 using MemNet.Config;
 using MemNet.Models;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 // 保留原有引用（但运行时会忽略RediSearch相关命令）
 using NRedisStack;
@@ -22,6 +23,8 @@ namespace MemNet.Redis;
 /// </summary>
 public class RedisVectorStore : IVectorStore
 {
+
+    private readonly ILogger _logger;
     private readonly IConnectionMultiplexer _redis;
     private readonly IDatabase _db;
     private readonly VectorStoreConfig _config;
@@ -31,12 +34,13 @@ public class RedisVectorStore : IVectorStore
     private readonly string _indexFlagKey;
 
     // 核心全局变量：标记Redis是否支持RediSearch（只需判断一次，缓存结果）
-    private bool? _isRediSearchSupported;
+    private bool? _isRedisVectorSupported;
     // 线程安全锁：确保只执行一次兼容性判断
     private readonly object _redisSearchCheckLock = new();
 
-    public RedisVectorStore(IConnectionMultiplexer redis, IOptions<MemoryConfig> config)
+    public RedisVectorStore(ILogger<RedisVectorStore> logger,IConnectionMultiplexer redis, IOptions<MemoryConfig> config)
     {
+        _logger = logger;
         _redis = redis ?? throw new ArgumentNullException(nameof(redis));
         _config = config.Value.VectorStore;
         _db = _redis.GetDatabase();
@@ -46,47 +50,136 @@ public class RedisVectorStore : IVectorStore
         _indexFlagKey = $"flag:{_indexName}";
     }
 
+
     /// <summary>
-    /// 全局兼容性判断方法：检查Redis是否支持RediSearch（结果缓存，只判断一次）
+    /// 全局兼容性判断方法：检查Redis是否支持向量查询（开发环境兼容提示，生产环境强制校验）
     /// </summary>
-    /// <returns>是否支持RediSearch</returns>
+    /// <returns>是否支持向量查询</returns>
+    /// <exception cref="NotSupportedException">生产环境Redis不支持向量查询时抛出</exception>
     private async Task<bool> CheckRediSearchSupportAsync()
     {
         // 双重检查锁定：确保线程安全且只执行一次判断
-        if (_isRediSearchSupported.HasValue)
+        if (_isRedisVectorSupported.HasValue)
         {
-            return _isRediSearchSupported.Value;
+            return _isRedisVectorSupported.Value;
         }
+
         lock (_redisSearchCheckLock)
         {
-            if (_isRediSearchSupported.HasValue)
+            if (_isRedisVectorSupported.HasValue)
             {
-                return _isRediSearchSupported.Value;
+                return _isRedisVectorSupported.Value;
             }
 
+            bool isSupported = false;
             try
             {
-                // 尝试执行FT._LIST命令判断是否支持RediSearch
+                // 尝试执行向量查询相关命令判断是否支持Redis向量功能
                 SearchCommands ft = _db.FT();
+                // 执行测试命令（使用无效索引避免影响实际数据）
                 _ = ft._List();
-                _isRediSearchSupported = true;
+
+                _isRedisVectorSupported = true;
+                isSupported = true;
             }
             catch (RedisServerException ex) when (ex.Message.Contains("unknown command") ||
-                                                ex.Message.Contains("FT._LIST") ||
-                                                ex.Message.Contains("FT.CREATE") ||
-                                                ex.Message.Contains("FT.SEARCH"))
+                                                ex.Message.Contains("FT.SEARCH") ||
+                                                ex.Message.Contains("VECTOR_RANGE") ||
+                                                ex.Message.Contains("vector"))
             {
-                // 捕获到未知命令异常，说明不支持RediSearch（Windows Redis）
-                _isRediSearchSupported = false;
+                // 捕获到向量查询相关命令未知异常，区分环境处理（接收返回值）
+                isSupported = HandleVectorUnsupportedException(ex);
             }
-            catch
+            catch (RedisServerException ex) when (ex.Message.Contains("index not found"))
             {
-                // 其他异常也默认标记为不支持
-                _isRediSearchSupported = false;
+                // 索引不存在说明命令本身被支持（只是测试索引不存在），标记为支持
+                isSupported = true;
+            }
+            catch (Exception ex)
+            {
+                // 其他异常区分环境处理（接收返回值）
+                isSupported = HandleVectorCheckException(ex);
             }
 
-            return _isRediSearchSupported.Value;
+            _isRedisVectorSupported = isSupported;
+            return isSupported;
         }
+    }
+
+    /// <summary>
+    /// 处理向量查询不支持的异常（开发环境日志提示，生产环境抛异常）
+    /// </summary>
+    /// <param name="innerException">原始异常</param>
+    /// <returns>是否支持向量查询（开发环境返回false，生产环境直接抛异常无返回）</returns>
+    /// <exception cref="NotSupportedException">生产环境抛出</exception>
+    private bool HandleVectorUnsupportedException(Exception innerException)
+    {
+        var errorMsg = "当前Redis版本不支持向量查询功能！\n" +
+                       "Windows系统用户注意：Windows原生Redis为Demo版本不支持生产环境，建议通过Docker安装Redis Stack（https://redis.io/docs/stack/get-started/install/docker/）。";
+
+        if (IsProductionEnvironment())
+        {
+            // 生产环境：强制抛出异常，阻断应用启动
+            throw new NotSupportedException(
+                $"【生产环境禁止启动】{errorMsg}\n请升级Redis至支持RediSearch/Redis Stack的版本后重新部署！",
+                innerException);
+        }
+        else
+        {
+            Console.WriteLine($"【开发环境兼容提示】{errorMsg}\n该提示仅用于开发兼容，生产环境必须升级Redis！");
+           // 开发环境：仅日志警告，返回false表示不支持
+           _logger.LogWarning(
+                innerException,
+                $"【开发环境兼容提示】{errorMsg}\n该提示仅用于开发兼容，生产环境必须升级Redis！");
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// 处理向量检测过程中的其他异常（开发环境日志提示，生产环境抛异常）
+    /// </summary>
+    /// <param name="innerException">原始异常</param>
+    /// <returns>是否支持向量查询（开发环境返回false，生产环境直接抛异常无返回）</returns>
+    /// <exception cref="NotSupportedException">生产环境抛出</exception>
+    private bool HandleVectorCheckException(Exception innerException)
+    {
+        var errorMsg = "检测Redis向量查询支持时发生异常！\n" +
+                       "Windows系统用户请通过Docker安装Redis Stack（https://redis.io/docs/stack/get-started/install/docker/），不要使用Windows原生Redis（仅Demo用途）。";
+
+        if (IsProductionEnvironment())
+        {
+            // 生产环境：强制抛出异常，阻断应用启动
+            throw new NotSupportedException(
+                $"【生产环境禁止启动】{errorMsg}\n请确保使用支持RediSearch/Redis Stack的Redis版本后重新部署！",
+                innerException);
+        }
+        else
+        {
+
+            Console.WriteLine($"【开发环境兼容提示】{errorMsg}\n该提示仅用于开发兼容，生产环境必须升级Redis！");
+            // 开发环境：仅日志警告，返回false表示不支持
+            _logger.LogError(
+                innerException,
+                $"【开发环境兼容提示】{errorMsg}\n该提示仅用于开发兼容，生产环境必须升级Redis！");
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// 判断当前是否为生产环境（需根据项目实际配置调整判断逻辑）
+    /// </summary>
+    /// <returns>是否生产环境</returns>
+    private bool IsProductionEnvironment()
+    {
+        // 方式1：基于ASPNETCORE_ENVIRONMENT环境变量（适用于ASP.NET Core）
+        var env = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") ?? string.Empty;
+        return env.Equals("Production", StringComparison.OrdinalIgnoreCase);
+
+        // 方式2：基于自定义配置（适用于非Web项目）
+        // return _configuration.GetValue<bool>("Environment:IsProduction");
+
+        // 方式3：基于配置文件的环境名称
+        // return _configuration["Environment:Name"]?.Equals("Production", StringComparison.OrdinalIgnoreCase) ?? false;
     }
 
     public async Task EnsureCollectionExistsAsync(int vectorSize, bool allowRecreation, CancellationToken ct = default)
