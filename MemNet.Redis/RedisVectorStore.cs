@@ -107,64 +107,62 @@ public class RedisVectorStore : IVectorStore
     }
 
     /// <summary>
-    /// 处理向量查询不支持的异常（开发环境日志提示，生产环境抛异常）
+    /// Handle the exception that vector query is not supported (log prompt in development environment, throw exception in production environment)
     /// </summary>
-    /// <param name="innerException">原始异常</param>
-    /// <returns>是否支持向量查询（开发环境返回false，生产环境直接抛异常无返回）</returns>
-    /// <exception cref="NotSupportedException">生产环境抛出</exception>
+    /// <param name="innerException">Original exception</param>
+    /// <returns>Whether vector query is supported (returns false in development environment, no return as exception is thrown directly in production environment)</returns>
+    /// <exception cref="NotSupportedException">Thrown in production environment</exception>
     private bool HandleVectorUnsupportedException(Exception innerException)
     {
-        var errorMsg = "当前Redis版本不支持向量查询功能！\n" +
-                       "Windows系统用户注意：Windows原生Redis为Demo版本不支持生产环境，建议通过Docker安装Redis Stack（https://redis.io/docs/stack/get-started/install/docker/）。";
+        var errorMsg = "The current Redis version does not support vector query functionality!\n" +
+                       "Note for Windows users: The native Windows Redis is a Demo version and not suitable for production environments. It is recommended to install Redis Stack via Docker (https://redis.io/docs/stack/get-started/install/docker/).";
 
         if (IsProductionEnvironment())
         {
-            // 生产环境：强制抛出异常，阻断应用启动
+            // Production environment: Force throw exception to block application startup
             throw new NotSupportedException(
-                $"【生产环境禁止启动】{errorMsg}\n请升级Redis至支持RediSearch/Redis Stack的版本后重新部署！",
+                $"[Production Environment Forbidden to Start] {errorMsg}\nPlease upgrade Redis to a version that supports RediSearch/Redis Stack before redeploying!",
                 innerException);
         }
         else
         {
-            Console.WriteLine($"【开发环境兼容提示】{errorMsg}\n该提示仅用于开发兼容，生产环境必须升级Redis！");
-           // 开发环境：仅日志警告，返回false表示不支持
-           _logger.LogWarning(
+            Console.WriteLine($"[Development Environment Compatibility Notice] {errorMsg}\nThis notice is for development compatibility only; Redis must be upgraded in production environments!");
+            // Development environment: Only log warning, return false to indicate not supported
+            _logger.LogWarning(
                 innerException,
-                $"【开发环境兼容提示】{errorMsg}\n该提示仅用于开发兼容，生产环境必须升级Redis！");
+                $"[Development Environment Compatibility Notice] {errorMsg}\nThis notice is for development compatibility only; Redis must be upgraded in production environments!");
             return false;
         }
     }
 
     /// <summary>
-    /// 处理向量检测过程中的其他异常（开发环境日志提示，生产环境抛异常）
+    /// Handle other exceptions during vector detection (log prompt in development environment, throw exception in production environment)
     /// </summary>
-    /// <param name="innerException">原始异常</param>
-    /// <returns>是否支持向量查询（开发环境返回false，生产环境直接抛异常无返回）</returns>
-    /// <exception cref="NotSupportedException">生产环境抛出</exception>
+    /// <param name="innerException">Original exception</param>
+    /// <returns>Whether vector query is supported (returns false in development environment, no return as exception is thrown directly in production environment)</returns>
+    /// <exception cref="NotSupportedException">Thrown in production environment</exception>
     private bool HandleVectorCheckException(Exception innerException)
     {
-        var errorMsg = "检测Redis向量查询支持时发生异常！\n" +
-                       "Windows系统用户请通过Docker安装Redis Stack（https://redis.io/docs/stack/get-started/install/docker/），不要使用Windows原生Redis（仅Demo用途）。";
+        var errorMsg = "An exception occurred while detecting Redis vector query support!\n" +
+                       "Windows users should install Redis Stack via Docker (https://redis.io/docs/stack/get-started/install/docker/) and avoid using the native Windows Redis (for Demo purposes only).";
 
         if (IsProductionEnvironment())
         {
-            // 生产环境：强制抛出异常，阻断应用启动
+            // Production environment: Force throw exception to block application startup
             throw new NotSupportedException(
-                $"【生产环境禁止启动】{errorMsg}\n请确保使用支持RediSearch/Redis Stack的Redis版本后重新部署！",
+                $"[Production Environment Forbidden to Start] {errorMsg}\nPlease ensure you are using a Redis version that supports RediSearch/Redis Stack before redeploying!",
                 innerException);
         }
         else
         {
-
-            Console.WriteLine($"【开发环境兼容提示】{errorMsg}\n该提示仅用于开发兼容，生产环境必须升级Redis！");
-            // 开发环境：仅日志警告，返回false表示不支持
+            Console.WriteLine($"[Development Environment Compatibility Notice] {errorMsg}\nThis notice is for development compatibility only; Redis must be upgraded in production environments!");
+            // Development environment: Only log error, return false to indicate not supported
             _logger.LogError(
                 innerException,
-                $"【开发环境兼容提示】{errorMsg}\n该提示仅用于开发兼容，生产环境必须升级Redis！");
+                $"[Development Environment Compatibility Notice] {errorMsg}\nThis notice is for development compatibility only; Redis must be upgraded in production environments!");
             return false;
         }
     }
-
     /// <summary>
     /// 判断当前是否为生产环境（需根据项目实际配置调整判断逻辑）
     /// </summary>
